@@ -1,0 +1,165 @@
+name: Build, Test, and Deploy EssentialCSharp.Web
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    environment: "BuildAndUploadImage"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up dependency caching for faster builds
+        uses: actions/cache@v5
+        id: nuget-cache
+        with:
+          path: |
+            ~/.nuget/packages
+            ${{ github.workspace }}/**/obj/project.assets.json
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+            ${{ runner.os }}-nuget-
+
+      - name: Restore with dotnet
+        run: dotnet restore
+
+      - name: Build with dotnet
+        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+
+      - name: Run .NET Tests
+        run: dotnet test --no-build --configuration Release
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+        # Build but no push with a PR
+      - name: Docker build (no push)
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          tags: temp-pr-validation
+          file: ./Dockerfile
+
+      - name: Build Container Image
+        if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          tags: ${{ vars.DEVCONTAINER_REGISTRY }}/try:${{ github.sha }},${{ vars.DEVCONTAINER_REGISTRY }}/try:latest
+          file: ./Dockerfile
+          context: .
+          outputs: type=docker,dest=${{ github.workspace }}/try.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: tryimage
+          path: ${{ github.workspace }}/try.tar
+
+#   deploy-development:
+#     if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
+#     runs-on: ubuntu-latest
+#     needs: build-and-test
+#     environment:
+#       name: "Development"
+
+#     steps:
+#       - name: Azure Login
+#         uses: azure/login@v2
+#         with:
+#           client-id: ${{ secrets.ESSENTIALCSHARPDEV_CLIENT_ID }}
+#           tenant-id: ${{ secrets.ESSENTIALCSHARP_APPIDENTITY_TENANT_ID }}
+#           subscription-id: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
+
+#       - name: Download artifact
+#         uses: actions/download-artifact@v7
+#         with:
+#           name: essentialcsharpwebimage
+#           path: ${{ github.workspace }}
+
+#       - name: Load image
+#         run: |
+#           docker load --input ${{ github.workspace }}/essentialcsharpwebimage.tar
+#           docker image ls -a
+
+#       - name: Log in to container registry
+#         uses: docker/login-action@v3
+#         with:
+#           registry: ${{ vars.DEVCONTAINER_REGISTRY }}
+#           username: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+#           password: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
+
+#       - name: Push Image to Container Registry
+#         run: docker push --all-tags ${{ vars.DEVCONTAINER_REGISTRY }}/essentialcsharpweb
+
+#       - name: Create and Deploy to Container App
+#         uses: azure/CLI@v2
+#         env:
+#           CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+#           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
+#           CONTAINER_REGISTRY: ${{ vars.DEVCONTAINER_REGISTRY }}
+#           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
+#           ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+#           ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
+#         with:
+#           inlineScript: |
+#             az config set extension.use_dynamic_install=yes_without_prompt
+#             az containerapp up -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --image $CONTAINER_REGISTRY/essentialcsharpweb:${{ github.sha }} --environment $CONTAINER_APP_ENVIRONMENT --registry-server $CONTAINER_REGISTRY --ingress external --target-port 8080 --registry-username $ACR_USERNAME --registry-password $ACR_PASSWORD
+
+#       - name: Assign Managed Identity to Container App and Set Secrets and Environment Variables
+#         uses: azure/CLI@v2
+#         env:
+#           CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+#           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
+#           CONTAINER_REGISTRY: ${{ vars.DEVCONTAINER_REGISTRY }}
+#           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
+#           KEYVAULTURI: ${{ secrets.ESSENTIALCSHARP_KEYVAULT_URI }}
+#           MANAGEDIDENTITYID: ${{ secrets.ESSENTIALCSHARP_APPIDENTITY_ID }}
+#           ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+#           ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
+#           AZURECLIENTID: ${{ secrets.IDENTITY_CLIENT_ID }}
+#         with:
+#           inlineScript: |
+#             az containerapp identity assign -n ${{ vars.CONTAINER_APP_NAME }} -g ${{ vars.RESOURCEGROUP }} --user-assigned ${{ vars.CONTAINER_APP_IDENTITY }}
+#             az containerapp secret set -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --secrets github-clientid=keyvaultref:$KEYVAULTURI/secrets/authentication-github-clientid,identityref:$MANAGEDIDENTITYID  \
+#               github-clientsecret=keyvaultref:$KEYVAULTURI/secrets/authentication-github-clientsecret,identityref:$MANAGEDIDENTITYID msft-clientid=keyvaultref:$KEYVAULTURI/secrets/authentication-microsoft-clientid,identityref:$MANAGEDIDENTITYID \
+#               msft-clientsecret=keyvaultref:$KEYVAULTURI/secrets/authentication-microsoft-clientsecret,identityref:$MANAGEDIDENTITYID emailsender-apikey=keyvaultref:$KEYVAULTURI/secrets/authmessagesender-apikey,identityref:$MANAGEDIDENTITYID \
+#               emailsender-secret=keyvaultref:$KEYVAULTURI/secrets/authmessagesender-secretkey,identityref:$MANAGEDIDENTITYID emailsender-name=keyvaultref:$KEYVAULTURI/secrets/authmessagesender-sendfromname,identityref:$MANAGEDIDENTITYID \
+#               emailsender-email=keyvaultref:$KEYVAULTURI/secrets/authmessagesender-sendfromemail,identityref:$MANAGEDIDENTITYID connectionstring=keyvaultref:$KEYVAULTURI/secrets/connectionstrings-essentialcsharpwebcontextconnection,identityref:$MANAGEDIDENTITYID \
+#               captcha-sitekey=keyvaultref:$KEYVAULTURI/secrets/captcha-sitekey,identityref:$MANAGEDIDENTITYID captcha-secretkey=keyvaultref:$KEYVAULTURI/secrets/captcha-secretkey,identityref:$MANAGEDIDENTITYID \
+#               appinsights-connectionstring=keyvaultref:$KEYVAULTURI/secrets/applicationinsights-connectionstring,identityref:$MANAGEDIDENTITYID \
+#               ai-endpoint=keyvaultref:$KEYVAULTURI/secrets/AIOptions--Endpoint,identityref:$MANAGEDIDENTITYID ai-apikey=keyvaultref:$KEYVAULTURI/secrets/AIOptions--ApiKey,identityref:$MANAGEDIDENTITYID \
+#               ai-vectordeployment=keyvaultref:$KEYVAULTURI/secrets/AIOptions--VectorGenerationDeploymentName,identityref:$MANAGEDIDENTITYID ai-chatdeployment=keyvaultref:$KEYVAULTURI/secrets/AIOptions--ChatDeploymentName,identityref:$MANAGEDIDENTITYID \
+#               ai-systemprompt=keyvaultref:$KEYVAULTURI/secrets/AIOptions--SystemPrompt,identityref:$MANAGEDIDENTITYID \
+#               postgres-vectorstore-connectionstring=keyvaultref:$KEYVAULTURI/secrets/connectionstrings--PostgresVectorDb,identityref:$MANAGEDIDENTITYID
+#             az containerapp update --name $CONTAINER_APP_NAME --resource-group $RESOURCEGROUP --replace-env-vars Authentication__github__clientId=secretref:github-clientid Authentication__github__clientSecret=secretref:github-clientsecret \
+#               Authentication__microsoft__clientId=secretref:msft-clientid Authentication__microsoft__clientSecret=secretref:msft-clientsecret AuthMessageSender__ApiKey=secretref:emailsender-apikey AuthMessageSender__SecretKey=secretref:emailsender-secret \
+#               AuthMessageSender__SendFromName=secretref:emailsender-name AuthMessageSender__SendFromEmail=secretref:emailsender-email ConnectionStrings__EssentialCSharpWebContextConnection=secretref:connectionstring ASPNETCORE_ENVIRONMENT=Staging \
+#               AZURE_CLIENT_ID=$AZURECLIENTID HCaptcha__SiteKey=secretref:captcha-sitekey HCaptcha__SecretKey=secretref:captcha-secretkey ApplicationInsights__ConnectionString=secretref:appinsights-connectionstring \
+#               AIOptions__Endpoint=secretref:ai-endpoint AIOptions__ApiKey=secretref:ai-apikey AIOptions__VectorGenerationDeploymentName=secretref:ai-vectordeployment AIOptions__ChatDeploymentName=secretref:ai-chatdeployment \
+#               AIOptions__SystemPrompt=secretref:ai-systemprompt ConnectionStrings__PostgresVectorStore=secretref:postgres-vectorstore-connectionstring
+
+#       - name: Logout of Azure CLI
+#         if: always()
+#         uses: azure/CLI@v2
+#         with:
+#           inlineScript: |
+#             az logout
+#             az cache purge
+#             az account clear

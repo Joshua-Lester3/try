@@ -48,7 +48,7 @@ try {
 
         # playwright
         if ($test) {
-            & $repoRoot\artifacts\bin\Microsoft.TryDotNet.IntegrationTests\$configuration\net9.0\playwright.ps1 install chromium
+            & $repoRoot\artifacts\bin\Microsoft.TryDotNet.IntegrationTests\$configuration\net10.0\playwright.ps1 install chromium
         }
     }
 }

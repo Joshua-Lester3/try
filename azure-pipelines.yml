@@ -78,10 +78,10 @@ stages:
             value: /p:SignType=$(_SignType)
         steps:
         - task: UseDotNet@2
-          displayName: Install SDK 9.0.111
+          displayName: Install SDK 10.0.100
           inputs:
             packageType: sdk
-            version: 9.0.111
+            version: 10.0.100
         - template: /eng/templates/build-and-test-job-windows-templates.yml@self
           parameters:
             buildConfig: $(_BuildConfig)
