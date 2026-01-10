@@ -3,6 +3,8 @@ name: Build, Test, and Deploy Try .NET API
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -62,11 +64,12 @@ jobs:
           tags: ${{ vars.DEVCONTAINER_REGISTRY }}/try:${{ github.sha }},${{ vars.DEVCONTAINER_REGISTRY }}/try:latest
           file: ./Dockerfile
           context: .
-          outputs: type=docker,dest=${{ github.workspace }}/try.tar
+          outputs: type=docker,dest=${{ github.workspace }}/tryimage.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v6
         with:
           name: tryimage
@@ -84,7 +87,7 @@ jobs:
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.ESSENTIALCSHARPDEV_CLIENT_ID }}
-          tenant-id: ${{ secrets.ESSENTIALCSHARP_APPIDENTITY_TENANT_ID }}
+          tenant-id: ${{ secrets.ESSENTIALCSHARP_TENANT_ID }}
           subscription-id: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
 
       - name: Download artifact
@@ -101,26 +104,41 @@ jobs:
       - name: Log in to container registry
         uses: azure/CLI@v2
         env:
-          ACR_NAME: ${{ vars.ACR_NAME }}
+          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }} 
         with:
           inlineScript: | 
-            az acr login --name $ACR_NAME
+            REGISTRY_NAME=${REGISTRY_URL%.azurecr.io}
+            az acr login --name $REGISTRY_NAME
 
       - name: Push Image to Container Registry
-        run: docker push --all-tags ${{ vars.DEVCONTAINER_REGISTRY }}/try
+        env:
+          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
+        run: docker push --all-tags $REGISTRY_URL/try
 
       - name: Create and Deploy to Container App
         uses: azure/CLI@v2
         env:
           CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
-          CONTAINER_REGISTRY: ${{ vars.DEVCONTAINER_REGISTRY }}
           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
-          IDENTITY_ID: ${{ secrets.IDENTITY_ID }}
+          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
+          SUBSCRIPTION_ID: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
+          MANAGED_IDENTITY_ID: ${{ secrets.MANAGED_IDENTITY_ID }}
         with:
           inlineScript: |
             az config set extension.use_dynamic_install=yes_without_prompt
-            az containerapp up -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --image $CONTAINER_REGISTRY/try:${{ github.sha }} --environment $CONTAINER_APP_ENVIRONMENT --registry-server $CONTAINER_REGISTRY --ingress external --target-port 8080 --registry-identity 
+            az extension add --name containerapp --upgrade
+            az containerapp up \
+              -n $CONTAINER_APP_NAME \
+              -g $RESOURCEGROUP \
+              --image $REGISTRY_URL/try:${{ github.sha }} \
+              --environment $CONTAINER_APP_ENVIRONMENT \
+              --registry-server $REGISTRY_URL \
+              --ingress external \
+              --target-port 8080 \
+              --user-assigned /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID \
+              --registry-identity /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID
+
 
       - name: Logout of Azure CLI
         if: always()
