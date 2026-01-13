@@ -1,0 +1,72 @@
+version: 2
+updates:
+  # NuGet dependencies - using central package management
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "nuget"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions (for future workflows)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # npm - microsoft-trydotnet
+  - package-ecosystem: "npm"
+    directory: "/src/microsoft-trydotnet"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # npm - microsoft-trydotnet-editor
+  - package-ecosystem: "npm"
+    directory: "/src/microsoft-trydotnet-editor"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # npm - microsoft-trydotnet-styles
+  - package-ecosystem: "npm"
+    directory: "/src/microsoft-trydotnet-styles"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # npm - microsoft-learn-mock
+  - package-ecosystem: "npm"
+    directory: "/src/microsoft-learn-mock"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "npm"
