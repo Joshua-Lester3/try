@@ -1,0 +1,150 @@
+name: Build, Test, and Deploy Try .NET API
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    environment: "BuildAndUploadImage"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up dependency caching for faster builds
+        uses: actions/cache@v5
+        id: nuget-cache
+        with:
+          path: |
+            ~/.nuget/packages
+            ${{ github.workspace }}/**/obj/project.assets.json
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+            ${{ runner.os }}-nuget-
+
+      - name: Restore with dotnet
+        run: dotnet restore
+
+      - name: Build with dotnet
+        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+
+      - name: Run .NET Tests
+        run: dotnet test --no-build --configuration Release
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+        # Build but no push with a PR
+      - name: Docker build (no push)
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          tags: temp-pr-validation
+          file: ./Dockerfile
+
+      - name: Build Container Image
+        if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          tags: ${{ vars.DEVCONTAINER_REGISTRY }}/try:${{ github.sha }},${{ vars.DEVCONTAINER_REGISTRY }}/try:latest
+          file: ./Dockerfile
+          context: .
+          outputs: type=docker,dest=${{ github.workspace }}/tryimage.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload artifact
+        if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v6
+        with:
+          name: tryimage
+          path: ${{ github.workspace }}/tryimage.tar
+
+  deploy-development:
+    if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    environment:
+      name: "Development"
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ESSENTIALCSHARPDEV_CLIENT_ID }}
+          tenant-id: ${{ secrets.ESSENTIALCSHARP_TENANT_ID }}
+          subscription-id: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
+
+      - name: Download artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: tryimage
+          path: ${{ github.workspace }}
+
+      - name: Load image
+        run: |
+          docker load --input ${{ github.workspace }}/tryimage.tar
+          docker image ls -a
+
+      - name: Log in to container registry
+        uses: azure/CLI@v2
+        env:
+          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
+        with:
+          inlineScript: |
+            REGISTRY_NAME=${REGISTRY_URL%.azurecr.io}
+            az acr login --name $REGISTRY_NAME
+
+      - name: Push Image to Container Registry
+        env:
+          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
+        run: docker push --all-tags $REGISTRY_URL/try
+
+      - name: Create and Deploy to Container App
+        uses: azure/CLI@v2
+        env:
+          CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+          RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
+          CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
+          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
+          SUBSCRIPTION_ID: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
+          MANAGED_IDENTITY_ID: ${{ secrets.MANAGED_IDENTITY_ID }}
+        with:
+          inlineScript: |
+            az config set extension.use_dynamic_install=yes_without_prompt
+            az extension add --name containerapp --upgrade
+            az containerapp up \
+              -n $CONTAINER_APP_NAME \
+              -g $RESOURCEGROUP \
+              --image $REGISTRY_URL/try:${{ github.sha }} \
+              --environment $CONTAINER_APP_ENVIRONMENT \
+              --registry-server $REGISTRY_URL \
+              --ingress external \
+              --target-port 8080 \
+              --user-assigned /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID \
+              --registry-identity /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID
+
+
+      - name: Logout of Azure CLI
+        if: always()
+        uses: azure/CLI@v2
+        with:
+          inlineScript: |
+            az logout
+            az cache purge
+            az account clear
