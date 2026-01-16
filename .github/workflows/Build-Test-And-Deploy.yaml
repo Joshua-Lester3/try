@@ -102,13 +102,10 @@ jobs:
           docker image ls -a
 
       - name: Log in to container registry
-        uses: azure/CLI@v2
         env:
           REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
-        with:
-          inlineScript: |
-            REGISTRY_NAME=${REGISTRY_URL%.azurecr.io}
-            az acr login --name $REGISTRY_NAME
+        run:
+            az acr login --name ${REGISTRY_URL%.azurecr.io}
 
       - name: Push Image to Container Registry
         env:
