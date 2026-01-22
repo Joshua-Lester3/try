@@ -136,6 +136,7 @@ jobs:
           MANAGED_IDENTITY_ID: ${{ vars.MANAGED_IDENTITY_ID }}
         with:
           inlineScript: |
+            IDENTITY_ID=$(az identity show -n ${{ vars.MANAGED_IDENTITY_ID }} -g ${{ vars.RESOURCEGROUP }} --query id -o tsv)
             az config set extension.use_dynamic_install=yes_without_prompt
             az containerapp up \
               -n $CONTAINER_APP_NAME \
@@ -144,18 +145,19 @@ jobs:
               --environment $CONTAINER_APP_ENVIRONMENT \
               --registry-server $REGISTRY_URL \
               --ingress external \
-              --registry-identity /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID \
+              --user-assigned $IDENTITY_ID \
+              --registry-identity $IDENTITY_ID \
               --target-port 80
 
-      - name: Assign MI to Container App
-        uses: azure/CLI@v2
-        env:
-          CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
-          RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
-          MANAGED_IDENTITY_ID: ${{ vars.MANAGED_IDENTITY_ID }}
-        with:
-          inlineScript: |
-            az containerapp identity assign -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --user-assigned $MANAGED_IDENTITY_ID
+    #   - name: Assign MI to Container App
+    #     uses: azure/CLI@v2
+    #     env:
+    #       CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+    #       RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
+    #       MANAGED_IDENTITY_ID: ${{ vars.MANAGED_IDENTITY_ID }}
+    #     with:
+    #       inlineScript: |
+    #         az containerapp identity assign -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --user-assigned $MANAGED_IDENTITY_ID
 
       - name: Logout of Azure CLI
         if: always()
