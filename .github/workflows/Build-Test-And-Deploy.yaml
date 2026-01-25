@@ -136,7 +136,9 @@ jobs:
           MANAGED_IDENTITY_ID: ${{ vars.MANAGED_IDENTITY_ID }}
         with:
           inlineScript: |
-            IDENTITY_ID=$(az identity show -n ${{ vars.MANAGED_IDENTITY_ID }} -g ${{ vars.RESOURCEGROUP }} --query id -o tsv)
+            # IDENTITY_ID=$(az identity show -n ${{ vars.MANAGED_IDENTITY_ID }} -g ${{ vars.RESOURCEGROUP }} --query id -o tsv)
+            IDENTITY_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/EssentialCSharp-Dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/ecs-web-dev-app-identity"
+
             az config set extension.use_dynamic_install=yes_without_prompt
             az extension add --name containerapp --upgrade
             az containerapp up \
