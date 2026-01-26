@@ -133,14 +133,15 @@ jobs:
           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
           REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
           SUBSCRIPTION_ID: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
-          MANAGED_IDENTITY_ID: ${{ vars.MANAGED_IDENTITY_ID }}
+          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
         with:
           inlineScript: |
             # IDENTITY_ID=$(az identity show -n ${{ vars.MANAGED_IDENTITY_ID }} -g ${{ vars.RESOURCEGROUP }} --query id -o tsv)
-            IDENTITY_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/EssentialCSharp-Dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/ecs-web-dev-app-identity"
+            # IDENTITY_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/EssentialCSharp-Dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/ecs-web-dev-app-identity"
 
             az config set extension.use_dynamic_install=yes_without_prompt
-            az extension add --name containerapp --upgrade
+            # az extension add --name containerapp --upgrade
             az containerapp up \
               -n $CONTAINER_APP_NAME \
               -g $RESOURCEGROUP \
@@ -148,8 +149,10 @@ jobs:
               --environment $CONTAINER_APP_ENVIRONMENT \
               --registry-server $REGISTRY_URL \
               --ingress external \
-              --user-assigned $IDENTITY_ID \
-              --registry-identity $IDENTITY_ID \
+              --registry-username $ACR_USERNAME \
+              --registry-password $ACR_PASSWORD \
+              # --user-assigned $IDENTITY_ID \
+              # --registry-identity $IDENTITY_ID \
               --target-port 80 \
               --debug
 
