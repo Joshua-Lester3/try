@@ -129,17 +129,7 @@ jobs:
         with:
           inlineScript: |
             az config set extension.use_dynamic_install=yes_without_prompt
-            az containerapp up \
-              -n $CONTAINER_APP_NAME \
-              -g $RESOURCEGROUP \
-              --image $REGISTRY_URL/try:${{ github.sha }} \
-              --environment $CONTAINER_APP_ENVIRONMENT \
-              --registry-server $REGISTRY_URL \
-              --ingress external \
-              --registry-username $ACR_USERNAME \
-              --registry-password $ACR_PASSWORD \
-              --target-port 80 \
-              --debug
+            az containerapp up -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --image $REGISTRY_URL/try:${{ github.sha }} --environment $CONTAINER_APP_ENVIRONMENT --registry-server $REGISTRY_URL --ingress external --registry-username $ACR_USERNAME --registry-password $ACR_PASSWORD --target-port 80 --debug
               
       - name: Logout of Azure CLI
         if: always()
