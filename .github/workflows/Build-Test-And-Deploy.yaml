@@ -81,6 +81,9 @@ jobs:
     needs: build-and-test
     environment:
       name: "Development"
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Azure Login
@@ -102,10 +105,11 @@ jobs:
           docker image ls -a
 
       - name: Log in to container registry
-        env:
-          REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
-        run:
-            az acr login --name ${REGISTRY_URL%.azurecr.io}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.DEVCONTAINER_REGISTRY }}
+          username: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+          password: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
 
       - name: Push Image to Container Registry
         env:
@@ -119,24 +123,13 @@ jobs:
           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
           REGISTRY_URL: ${{ vars.DEVCONTAINER_REGISTRY }}
-          SUBSCRIPTION_ID: ${{ secrets.ESSENTIALCSHARP_SUBSCRIPTION_ID }}
-          MANAGED_IDENTITY_ID: ${{ secrets.MANAGED_IDENTITY_ID }}
+          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
         with:
           inlineScript: |
             az config set extension.use_dynamic_install=yes_without_prompt
-            az extension add --name containerapp --upgrade
-            az containerapp up \
-              -n $CONTAINER_APP_NAME \
-              -g $RESOURCEGROUP \
-              --image $REGISTRY_URL/try:${{ github.sha }} \
-              --environment $CONTAINER_APP_ENVIRONMENT \
-              --registry-server $REGISTRY_URL \
-              --ingress external \
-              --target-port 8080 \
-              --user-assigned /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID \
-              --registry-identity /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCEGROUP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$MANAGED_IDENTITY_ID
-
-
+            az containerapp up -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --image $REGISTRY_URL/try:${{ github.sha }} --environment $CONTAINER_APP_ENVIRONMENT --registry-server $REGISTRY_URL --ingress external --registry-username $ACR_USERNAME --registry-password $ACR_PASSWORD --target-port 80 --debug
+              
       - name: Logout of Azure CLI
         if: always()
         uses: azure/CLI@v2
