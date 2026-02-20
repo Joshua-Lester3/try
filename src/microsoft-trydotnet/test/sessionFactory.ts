@@ -6,13 +6,13 @@ import { ISession, createSession, Configuration } from "../src";
 import { notifyEditorReadyWithId } from "./messagingMocks";
 
 export function createReadySession(configuration: Configuration, editorIFrame: HTMLIFrameElement, window: DOMWindow): Promise<ISession> {
-    let awaitableSession = createSession(configuration, [editorIFrame], <Window><any>window);
+    let awaitableSession = createSession(configuration, [editorIFrame], window as unknown as Window);
     notifyEditorReadyWithId(configuration, window, "0");
     return awaitableSession;
 }
 
 export function createReadySessionWithMultipleEditors(configuration: Configuration, editorIFrames: HTMLIFrameElement[], window: DOMWindow): Promise<ISession> {
-    let awaitableSession = createSession(configuration, editorIFrames, <Window><any>window);
+    let awaitableSession = createSession(configuration, editorIFrames, window as unknown as Window);
     for (let editorIframe of editorIFrames) {
         notifyEditorReadyWithId(configuration, window, editorIframe.dataset.trydotnetEditorId!);
     }

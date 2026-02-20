@@ -10,6 +10,7 @@
 			"es2021"
 		],
 		"types": [],
+		"skipLibCheck": true,
 		"baseUrl": "./node_modules",
 		"jsx": "preserve",
 		"typeRoots": [

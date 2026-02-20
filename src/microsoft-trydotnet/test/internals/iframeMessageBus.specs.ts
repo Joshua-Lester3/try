@@ -18,7 +18,7 @@ describe("a message bus", () => {
     it("can post message to iframe", (done: Done) => {
         var dom = buildSimpleIFrameDom(defaultConfiguration);
 
-        let iframe = <HTMLIFrameElement>(dom.window.document.querySelector("iframe"));
+        let iframe = (dom.window.document.querySelector("iframe")) as HTMLIFrameElement;
         iframe = configureEmbeddableEditorIFrame(iframe, defaultConfiguration);
 
         iframe.contentWindow!.addEventListener("message", (message: any) => {
@@ -27,7 +27,7 @@ describe("a message bus", () => {
             }
         });
 
-        let bus = new IFrameMessageBus(iframe, <Window><any>dom.window);
+        let bus = new IFrameMessageBus(iframe, dom.window as unknown as Window);
 
         bus.post({ type: RUN_REQUEST, requestId: "0" });
     });
@@ -35,12 +35,12 @@ describe("a message bus", () => {
     it("can receive messages from the main window", (done: Done) => {
         var dom = buildSimpleIFrameDom(defaultConfiguration);;
 
-        let iframe = <HTMLIFrameElement>(dom.window.document.querySelector("iframe"));
+        let iframe = (dom.window.document.querySelector("iframe")) as HTMLIFrameElement;
         iframe = configureEmbeddableEditorIFrame(iframe, defaultConfiguration);
 
         dom.window.postMessage({ type: RUN_RESPONSE }, defaultConfiguration.hostOrigin!);
 
-        let bus = new IFrameMessageBus(iframe, <Window><any>dom.window);
+        let bus = new IFrameMessageBus(iframe, dom.window as unknown as Window);
 
         bus.subscribe({
             next: (_message) => {
@@ -52,12 +52,12 @@ describe("a message bus", () => {
     it("can receive messages from the main window with matching editorId", (done: Done) => {
         var dom = buildSimpleIFrameDom(defaultConfiguration);;
 
-        let iframe = <HTMLIFrameElement>(dom.window.document.querySelector("iframe"));
+        let iframe = (dom.window.document.querySelector("iframe")) as HTMLIFrameElement;
         iframe = configureEmbeddableEditorIFrame(iframe, defaultConfiguration);
 
         dom.window.postMessage({ type: HOST_EDITOR_READY_EVENT }, defaultConfiguration.hostOrigin!);
 
-        let bus = new IFrameMessageBus(iframe, <Window><any>dom.window);
+        let bus = new IFrameMessageBus(iframe, dom.window as unknown as Window);
 
         bus.subscribe({
             next: (_message) => {

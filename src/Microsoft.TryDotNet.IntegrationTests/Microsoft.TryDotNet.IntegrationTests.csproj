@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Assent" />
+    <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.Playwright" />
     <PackageReference Include="peaky.client" />
     <PackageReference Include="peaky.xunit" />
