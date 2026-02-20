@@ -44,7 +44,7 @@
     "monaco-editor-webpack-plugin": "^7.1.1",
     "source-map-loader": "^5.0.0",
     "style-loader": "^3.3.4",
-    "tmp": "^0.2.3",
+    "tmp": "^0.2.5",
     "ts-loader": "^9.5.4",
     "ts-mocha": "^11.1.0",
     "ts-node": "^10.9.2",

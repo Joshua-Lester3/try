@@ -26,7 +26,7 @@
     "mocha-multi-reporters": "1.5.1",
     "mocha-trx-reporter": "3.3.1",
     "requirejs": "^2.3.8",
-    "rollup": "2.75.7",
+    "rollup": "2.79.2",
     "rollup-plugin-typescript2": "0.36.0",
     "source-map-loader": "5.0.0",
     "source-map-support": "0.5.21",
@@ -51,7 +51,7 @@
     "ciMinify": "uglifyjs dist/trydotnet.js --source-map"
   },
   "dependencies": {
-    "@microsoft/polyglot-notebooks": "1.0.441801",
+    "@microsoft/polyglot-notebooks": "1.0.711802",
     "es6-promise": "4.2.8",
     "rxjs": "7.8.2",
     "uuid": "^7.0.0"
