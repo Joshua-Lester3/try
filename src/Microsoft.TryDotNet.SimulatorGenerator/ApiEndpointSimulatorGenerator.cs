@@ -16,11 +16,6 @@ namespace Microsoft.TryDotNet.SimulatorGenerator;
 
 public class ApiEndpointSimulatorGenerator
 {
-    static ApiEndpointSimulatorGenerator() 
-    {
-        CSharpProjectKernel.RegisterEventsAndCommands();
-    }
-
     public static async Task CreateScenarioFiles(DirectoryInfo destinationFolder)
     {
         foreach (var apiContractScenario in ApiContractScenarios())

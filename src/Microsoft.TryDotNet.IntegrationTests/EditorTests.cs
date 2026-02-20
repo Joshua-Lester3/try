@@ -476,7 +476,7 @@ Console.".Replace("\r\n", "\n"));
         completionItemDisplayText.Should().Contain(new[] { "BackgroundColor", "Beep", "Clear" });
     }
 
-    [IntegrationTestFact(Skip = "Flaky in CI - signatureHelp widget never appears reliably in headless mode (same issue as completion test)")]
+    [IntegrationTestFact]
     [Obsolete]
     public async Task user_typing_code_gets_signatureHelp()
     {
@@ -534,7 +534,7 @@ Console.WriteLine(".Replace("\r\n", "\n"));
         signatureHelpDisplayText = signatureHelpDisplayText.Replace("\r", "");
 
         signatureHelpDisplayText.Should().Be(@"
-01/19
+01/20
 void Console.WriteLine()
 
 Writes the current line terminator to the standard output stream.
