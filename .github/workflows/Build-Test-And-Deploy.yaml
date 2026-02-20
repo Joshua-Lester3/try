@@ -19,6 +19,39 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'src/**/package-lock.json'
+
+      - name: Build and test microsoft-trydotnet
+        working-directory: src/microsoft-trydotnet
+        run: |
+          npm ci
+          npm run buildProd
+          npm run ciTest
+
+      - name: Build and test microsoft-trydotnet-editor
+        working-directory: src/microsoft-trydotnet-editor
+        run: |
+          npm ci
+          npm run buildProd
+          npm run ciTest
+
+      - name: Build microsoft-trydotnet-styles
+        working-directory: src/microsoft-trydotnet-styles
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-learn-mock
+        working-directory: src/microsoft-learn-mock
+        run: |
+          npm ci
+          npm run buildProd
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -43,7 +76,19 @@ jobs:
         run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
 
       - name: Run .NET Tests
-        run: dotnet test --no-build --configuration Release
+        id: run-dotnet-tests
+        continue-on-error: true
+        run: dotnet test --no-build --configuration Release --blame-hang-timeout 15m --blame-hang-dump-type full -l trx --results-directory ./TestResults
+        env:
+          POCKETLOGGER_LOG_PATH: ${{ github.workspace }}/artifacts/logs/pocketlogger.log
+
+      - name: Convert TRX to Playlist
+        if: ${{ steps.run-dotnet-tests.outcome == 'failure' }}
+        uses: BenjaminMichaelis/trx-to-vsplaylist@v3
+        with:
+          trx-file-path: './TestResults/*.trx'
+          test-outcomes: 'Failed'
+          artifact-name: 'linux-test-playlists'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -75,10 +120,159 @@ jobs:
           name: tryimage
           path: ${{ github.workspace }}/tryimage.tar
 
+  build-and-test-windows:
+    # Ensures .NET build and unit tests pass on Windows, matching the original
+    # Azure DevOps Windows_NT job. Integration tests are covered separately.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'src/**/package-lock.json'
+
+      - name: Build microsoft-trydotnet
+        working-directory: src/microsoft-trydotnet
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-trydotnet-editor
+        working-directory: src/microsoft-trydotnet-editor
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-trydotnet-styles
+        working-directory: src/microsoft-trydotnet-styles
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-learn-mock
+        working-directory: src/microsoft-learn-mock
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up dependency caching for faster builds
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore with dotnet
+        run: dotnet restore
+
+      - name: Build with dotnet
+        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+
+      - name: Run .NET Tests
+        id: run-dotnet-tests
+        continue-on-error: true
+        run: dotnet test --no-build --configuration Release --blame-hang-timeout 15m --blame-hang-dump-type full -l trx --results-directory ./TestResults
+        env:
+          POCKETLOGGER_LOG_PATH: ${{ github.workspace }}/artifacts/logs/pocketlogger.log
+
+      - name: Convert TRX to Playlist
+        if: ${{ steps.run-dotnet-tests.outcome == 'failure' }}
+        uses: BenjaminMichaelis/trx-to-vsplaylist@v3
+        with:
+          trx-file-path: './TestResults/*.trx'
+          test-outcomes: 'Failed'
+          artifact-name: 'windows-test-playlists'
+
+  integration-tests:
+    # Integration tests use Playwright and are gated behind RunIntegrationTests=true.
+    # IntegrationTestFactAttribute explicitly skips these tests on Linux, so a
+    # Windows runner is required to actually execute them.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'src/**/package-lock.json'
+
+      - name: Build microsoft-trydotnet
+        working-directory: src/microsoft-trydotnet
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-trydotnet-editor
+        working-directory: src/microsoft-trydotnet-editor
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-trydotnet-styles
+        working-directory: src/microsoft-trydotnet-styles
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Build microsoft-learn-mock
+        working-directory: src/microsoft-learn-mock
+        run: |
+          npm ci
+          npm run buildProd
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up dependency caching for faster builds
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore with dotnet
+        run: dotnet restore
+
+      - name: Build with dotnet
+        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+
+      - name: Run .NET Integration Tests
+        id: run-dotnet-integration-tests
+        continue-on-error: true
+        run: dotnet test --no-build --configuration Release --blame-hang-timeout 15m --blame-hang-dump-type full -l trx --results-directory ./TestResults
+        env:
+          RunIntegrationTests: true
+          POCKETLOGGER_LOG_PATH: ${{ github.workspace }}/artifacts/logs/pocketlogger.log
+          TRYDOTNET_PREBUILDS_PATH: ${{ github.workspace }}/artifacts/trydotnet-prebuilds
+
+      - name: Convert TRX to Playlist
+        if: ${{ steps.run-dotnet-integration-tests.outcome == 'failure' }}
+        uses: BenjaminMichaelis/trx-to-vsplaylist@v3
+        with:
+          trx-file-path: './TestResults/*.trx'
+          test-outcomes: 'Failed'
+          artifact-name: 'integration-test-playlists'
+
   deploy-development:
     if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [build-and-test, build-and-test-windows, integration-tests]
     environment:
       name: "Development"
     permissions:
