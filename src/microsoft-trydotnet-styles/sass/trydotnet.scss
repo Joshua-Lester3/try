@@ -3,11 +3,11 @@
 
 @charset "utf-8";
 
-@import "../node_modules/github-markdown-css/github-markdown";
+@use "../node_modules/github-markdown-css/github-markdown";
 
-@import "./constants";
-@import "./run-button";
-@import "./output-panels";
+@use "./constants";
+@use "./run-button";
+@use "./output-panels";
 
 html,
 body {
@@ -26,21 +26,21 @@ html {
 }
 
 header {
-  background-color: $dotnet-purple;
-  color: $header-footer-color;
+  background-color: constants.$dotnet-purple;
+  color: constants.$header-footer-color;
   padding: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 
   .dotnet-try {
-    color: $dotnet-try-cmd-color;
-    font-size: $dotnet-try-cmd-font-size;
+    color: constants.$dotnet-try-cmd-color;
+    font-size: constants.$dotnet-try-cmd-font-size;
   }
 
   .project-file-path {
     opacity: 0.6;
-    font-size: $dotnet-try-cmd-font-size;
+    font-size: constants.$dotnet-try-cmd-font-size;
     margin-left: 16px;
   }
 
@@ -74,8 +74,8 @@ section {
 
 footer {
   max-height: 6em;
-  color: $header-footer-color;
-  background: $footer-background-color;
+  color: constants.$header-footer-color;
+  background: constants.$footer-background-color;
 
   ul {
     float: right;
@@ -144,7 +144,7 @@ ul.index {
   li {
     padding: 0;
     list-style: none;
-    background-color: $dotnet-purple;
+    background-color: constants.$dotnet-purple;
     //        @include action-button
   }
 }

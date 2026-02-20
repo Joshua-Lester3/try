@@ -3,15 +3,16 @@
 
 
 @charset "utf-8";
-@import "./constants";
+@use "sass:color";
+@use "./constants";
 
 @keyframes textBlink {
   from {
-    color: $white;
+    color: constants.$white;
   }
 
   to {
-    color: $text;
+    color: constants.$text;
   }
 }
 
@@ -29,8 +30,8 @@
   border: none;
   margin: 2px;
   padding: 4px 12px;
-  color: $white;
-  background-color: $dotnet-purple;
+  color: constants.$white;
+  background-color: constants.$dotnet-purple;
   transition: background-color 0.15s ease-in-out, transform 0.15s ease-in-out;
 }
 
@@ -39,24 +40,24 @@ ul.index > li {
   @include action-button;
 
   &:hover {
-    background-color: lighten($dotnet-purple, 17.5%);
+    background-color: color.adjust(constants.$dotnet-purple, $lightness: 17.5%);
   }
 
   &:disabled {
-    background-color: lighten($dotnet-purple, 25.5%);
+    background-color: color.adjust(constants.$dotnet-purple, $lightness: 25.5%);
   }
 
   svg {
     transform-origin: 50% 50%;
     height: 16px;
     display: inline-flex;
-    fill: $white;
+    fill: constants.$white;
   }
 }
 
 ul.index > li > a {
   display: block;
-  color: $white;
+  color: constants.$white;
   padding: 4px 12px;
   text-decoration: none;
 }
@@ -67,7 +68,7 @@ ul.index > li > a {
   top: 0px;
   margin: 4px;
   svg {
-    fill: $white;
+    fill: constants.$white;
     path {
       opacity: 1;
     }
@@ -80,7 +81,7 @@ ul.index > li > a {
 
 button.run {
   svg {
-    fill: $white;
+    fill: constants.$white;
     path {
       opacity: 1;
     }
