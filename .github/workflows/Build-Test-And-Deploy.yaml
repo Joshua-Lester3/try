@@ -19,61 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'src/**/package-lock.json'
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-node
 
-      - name: Build and test microsoft-trydotnet
+      - name: Set up .NET environment
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Run ciTest for microsoft-trydotnet
         working-directory: src/microsoft-trydotnet
-        run: |
-          npm ci
-          npm run buildProd
-          npm run ciTest
+        run: npm run ciTest
 
-      - name: Build and test microsoft-trydotnet-editor
+      - name: Run ciTest for microsoft-trydotnet-editor
         working-directory: src/microsoft-trydotnet-editor
-        run: |
-          npm ci
-          npm run buildProd
-          npm run ciTest
-
-      - name: Build microsoft-trydotnet-styles
-        working-directory: src/microsoft-trydotnet-styles
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-learn-mock
-        working-directory: src/microsoft-learn-mock
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Set up dependency caching for faster builds
-        uses: actions/cache@v5
-        id: nuget-cache
-        with:
-          path: |
-            ~/.nuget/packages
-            ${{ github.workspace }}/**/obj/project.assets.json
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-            ${{ runner.os }}-nuget-
-
-      - name: Restore with dotnet
-        run: dotnet restore
-
-      - name: Build with dotnet
-        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+        run: npm run ciTest
 
       - name: Run .NET Tests
         id: run-dotnet-tests
@@ -128,55 +86,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'src/**/package-lock.json'
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-node
 
-      - name: Build microsoft-trydotnet
-        working-directory: src/microsoft-trydotnet
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-trydotnet-editor
-        working-directory: src/microsoft-trydotnet-editor
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-trydotnet-styles
-        working-directory: src/microsoft-trydotnet-styles
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-learn-mock
-        working-directory: src/microsoft-learn-mock
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Set up dependency caching for faster builds
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Restore with dotnet
-        run: dotnet restore
-
-      - name: Build with dotnet
-        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+      - name: Set up .NET environment
+        uses: ./.github/actions/setup-dotnet
 
       - name: Run .NET Tests
         id: run-dotnet-tests
@@ -202,55 +116,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'src/**/package-lock.json'
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-node
 
-      - name: Build microsoft-trydotnet
-        working-directory: src/microsoft-trydotnet
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-trydotnet-editor
-        working-directory: src/microsoft-trydotnet-editor
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-trydotnet-styles
-        working-directory: src/microsoft-trydotnet-styles
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Build microsoft-learn-mock
-        working-directory: src/microsoft-learn-mock
-        run: |
-          npm ci
-          npm run buildProd
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Set up dependency caching for faster builds
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Restore with dotnet
-        run: dotnet restore
-
-      - name: Build with dotnet
-        run: dotnet build -p:ContinuousIntegrationBuild=True -p:ReleaseDateAttribute=True --configuration Release --no-restore
+      - name: Set up .NET environment
+        uses: ./.github/actions/setup-dotnet
 
       - name: Run .NET Integration Tests
         id: run-dotnet-integration-tests
