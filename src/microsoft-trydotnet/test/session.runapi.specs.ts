@@ -23,7 +23,7 @@ describe("a user", () => {
         beforeEach(() => {
             configuration = { hostOrigin: "https://learn.microsoft.com" };
             dom = buildSimpleIFrameDom(configuration);
-            let iframe = <HTMLIFrameElement>(dom.window.document.querySelector("iframe"));
+            let iframe = (dom.window.document.querySelector("iframe")) as HTMLIFrameElement;
             editorIFrame = configureEmbeddableEditorIFrame(iframe, configuration);
         });
 

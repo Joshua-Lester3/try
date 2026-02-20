@@ -17,10 +17,10 @@ describe("a request id generator", () => {
     it("uses local generator ", async () => {
         var dom = buildSimpleIFrameDom(defaultConfiguration);
 
-        let iframe = <HTMLIFrameElement>(dom.window.document.querySelector("iframe"));
+        let iframe = (dom.window.document.querySelector("iframe")) as HTMLIFrameElement;
         iframe = configureEmbeddableEditorIFrame(iframe, defaultConfiguration);
 
-        let bus = new IFrameMessageBus(iframe, <Window><any>dom.window);
+        new IFrameMessageBus(iframe, dom.window as unknown as Window);
 
         let generator = new RequestIdGenerator();
 

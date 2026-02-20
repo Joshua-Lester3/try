@@ -46,7 +46,7 @@ describe("a monaco editor", () => {
         });
         messages.should.not.be.empty;
         messages[0].type.should.equal(newContract.DefineMonacoEditorThemesType);
-        (<any>messages[0]).themes.should.deep.equal({
+        (messages[0] as any).themes.should.deep.equal({
             "different theme": {
                 base: 'vs-dark',
                 inherit: true,
@@ -71,7 +71,7 @@ describe("a monaco editor", () => {
         messages.should.not.be.empty;
         messages[0].type.should.equal(newContract.ConfigureMonacoEditorType);
         messages[0].type.should.equal(newContract.ConfigureMonacoEditorType);
-        (<any>messages[0]).editorOptions.minimap.should.deep.equal(
+        (messages[0] as any).editorOptions.minimap.should.deep.equal(
             {
                 enabled: false
             });
@@ -90,12 +90,12 @@ describe("a monaco editor", () => {
         });
         messages.should.not.be.empty;
         messages[0].type.should.equal(newContract.ConfigureMonacoEditorType);
-        (<any>messages[0]).editorOptions.minimap.should.deep.equal(
+        (messages[0] as any).editorOptions.minimap.should.deep.equal(
             {
                 enabled: false
             });
         messages[1].type.should.equal(newContract.ConfigureMonacoEditorType);
-        (<any>messages[1]).theme.should.equal("different theme");
+        (messages[1] as any).theme.should.equal("different theme");
     });
 
 });

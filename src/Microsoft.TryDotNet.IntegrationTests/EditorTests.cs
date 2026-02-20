@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Playwright;
 using Pocket.For.Xunit;
 using Xunit.Abstractions;
@@ -292,7 +292,6 @@ public class EditorTests : PlaywrightTestBase
     }
 
     [IntegrationTestFact]
-    [Obsolete]
     public async Task when_user_code_in_editor_diagnostics_are_produced()
     {
         var page = await NewPageAsync();
@@ -334,12 +333,12 @@ public class EditorTests : PlaywrightTestBase
 
         await page.RunAndWaitForConsoleMessageAsync(async () =>
         {
-            await editor.TypeAsync(@"/////////////////////////
+            await editor.PressSequentiallyAsync(@"/////////////////////////
 int i = ""NaN"";
-/////////////////////////".Replace("\r\n", "\n"));
+/////////////////////////".Replace("\r\n", "\n"), new LocatorPressSequentiallyOptions { Delay = 30 });
 
             await editor.PressAsync("Enter", new LocatorPressOptions { Delay = 0.5f });
-            
+
         }, new PageRunAndWaitForConsoleMessageOptions()
         {
             Predicate = message => message.Text.Contains("[MonacoEditorAdapter.setMarkers]"),
@@ -359,7 +358,6 @@ int i = ""NaN"";
     }
 
     [IntegrationTestFact]
-    [Obsolete]
     public async Task when_user_code_in_editor_is_executed_display_events_are_produced()
     {
         var page = await NewPageAsync();
@@ -399,7 +397,7 @@ int i = ""NaN"";
         await page.ClearMonacoEditor();
 
         await page.TypeTextInMonacoEditor($@"using System;
-namespace myApp {{ 
+namespace myApp {{
 class Program {{
 static void Main() {{
 Console.WriteLine(""{randomValue}"");".Replace("\r\n", "\n"));
@@ -418,7 +416,6 @@ Console.WriteLine(""{randomValue}"");".Replace("\r\n", "\n"));
     }
 
     [IntegrationTestFact(Skip ="Need to investigate. Disabling this test now to avoid blocking pipeline")]
-    [Obsolete]
     public async Task user_typing_code_gets_completion()
     {
         var page = await NewPageAsync();
@@ -477,7 +474,6 @@ Console.".Replace("\r\n", "\n"));
     }
 
     [IntegrationTestFact]
-    [Obsolete]
     public async Task user_typing_code_gets_signatureHelp()
     {
         var page = await NewPageAsync();
@@ -542,7 +538,6 @@ Writes the current line terminator to the standard output stream.
     }
 
     [IntegrationTestFact]
-    [Obsolete]
     public async Task when_user_code_in_editor_is_executed_it_produces_runResult_event()
     {
         var page = await NewPageAsync();
@@ -582,7 +577,7 @@ Writes the current line terminator to the standard output stream.
         await page.ClearMonacoEditor();
 
         await page.TypeTextInMonacoEditor($@"using System;
-namespace myApp {{ 
+namespace myApp {{
 class Program {{
 static void Main() {{
 Console.WriteLine(""{randomValue}"");".Replace("\r\n", "\n"));
@@ -600,7 +595,6 @@ Console.WriteLine(""{randomValue}"");".Replace("\r\n", "\n"));
     }
 
    [IntegrationTestFact]
-    [Obsolete]
     public async Task when_user_code_in_editor_is_executed_it_produces_runResult_event_with_outputs()
     {
         var page = await NewPageAsync();
@@ -640,7 +634,7 @@ Console.WriteLine(""{randomValue}"");".Replace("\r\n", "\n"));
         await page.ClearMonacoEditor();
 
         await page.TypeTextInMonacoEditor($@"using System;
-namespace myApp {{ 
+namespace myApp {{
 class Program {{
 static void Main() {{
 Console.WriteLine(""{randomValue}"");
@@ -660,7 +654,6 @@ Console.WriteLine(""{randomValue}b"");".Replace("\r\n", "\n"));
     }
 
     [IntegrationTestFact]
-    [Obsolete]
     public async Task user_code_in_editor_is_executed()
     {
         var page = await NewPageAsync();
@@ -699,7 +692,7 @@ Console.WriteLine(""{randomValue}b"");".Replace("\r\n", "\n"));
         await page.ClearMonacoEditor();
 
         await page.TypeTextInMonacoEditor($@"using System;
-namespace myApp {{ 
+namespace myApp {{
 class Program {{
 static void Main() {{
 Console.WriteLine(""{randomValue}"");".Replace("\r\n", "\n"));

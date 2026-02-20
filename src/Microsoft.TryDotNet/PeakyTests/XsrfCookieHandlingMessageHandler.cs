@@ -1,5 +1,5 @@
 ﻿using System.Net;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace Microsoft.TryDotNet.PeakyTests;
 

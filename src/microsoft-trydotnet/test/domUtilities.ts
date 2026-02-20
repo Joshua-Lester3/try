@@ -22,6 +22,6 @@ export function buildSimpleIFrameDom(configuration: Configuration): JSDOM {
 
 
 export function getEditorIFrame(dom: JSDOM): HTMLIFrameElement {
-    let iframe = <HTMLIFrameElement>(dom.window.document.body.querySelector("iframe"));
+    let iframe = (dom.window.document.body.querySelector("iframe")) as HTMLIFrameElement;
     return iframe;
 }
