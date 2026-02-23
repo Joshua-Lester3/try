@@ -24,7 +24,7 @@
     "chai-as-promised": "7.1.1",
     "jsdom": "28.1.0",
     "lodash": "4.17.23",
-    "mkdirp": "1.0.4",
+    "mkdirp": "3.0.1",
     "mocha": "11.7.5",
     "mocha-multi-reporters": "1.5.1",
     "mocha-trx-reporter": "3.3.1",
