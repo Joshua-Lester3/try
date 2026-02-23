@@ -56,7 +56,7 @@
     "@microsoft/polyglot-notebooks": "1.0.441801",
     "monaco-editor": "0.33.0",
     "rxjs": "7.8.2",
-    "uuid": "7.0.0"
+    "uuid": "13.0.0"
   },
   "mocha": {
     "ui": "bdd",
