@@ -36,8 +36,21 @@ export function getUrls(): { trydotnetUrl: string, trydotnetOrigin: string } {
 
 	if (window) {
 		let params = new URLSearchParams(window.location.search);
-		ret.trydotnetUrl = params.get('trydotnetUrl') || trydotnetUrl;
-		ret.trydotnetOrigin = params.get('trydotnetOrigin') || trydotnetOrigin;
+		const paramUrl = params.get('trydotnetUrl');
+		if (paramUrl && paramUrl.startsWith('/') && !paramUrl.startsWith('//')) {
+			ret.trydotnetUrl = paramUrl;
+		}
+		const paramOrigin = params.get('trydotnetOrigin');
+		if (paramOrigin) {
+			try {
+				const url = new URL(paramOrigin);
+				if (url.protocol === 'https:' && (url.hostname === 'trydotnet.microsoft.com' || url.hostname.endsWith('.microsoft.com'))) {
+					ret.trydotnetOrigin = paramOrigin;
+				}
+			} catch {
+				// invalid URL, use default
+			}
+		}
 	}
 	return ret;
 }

@@ -70,3 +70,13 @@ updates:
     labels:
       - "dependencies"
       - "npm"
+
+  - package-ecosystem: "dotnet-sdk"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "dotnet-sdk"

@@ -88,7 +88,7 @@ export function registerForEditorMessages(configuration: Configuration, iframe: 
                 content: request.content,
                 relativeFilePath: editorState.documentId.relativeFilePath,
                 regionName: editorState.documentId.regionName,
-                editorId: (<any>apiMessage).editorId,
+                editorId: (apiMessage as any).editorId,
             };//?
 
             window.postMessage(response, configuration.hostOrigin!);

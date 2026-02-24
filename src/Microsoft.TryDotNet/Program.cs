@@ -105,8 +105,6 @@ public class Program
                 break;
         }
 
-        CSharpProjectKernel.RegisterEventsAndCommands();
-
         var app = builder.Build();
 
         app.UseCors();

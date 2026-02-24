@@ -1,0 +1,60 @@
+name: 'Setup Node.js Environment'
+description: 'Set up Node.js, install npm dependencies, and optionally build all JS packages'
+inputs:
+  build:
+    description: 'Whether to run npm buildProd after install'
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: 'src/**/package-lock.json'
+
+    - name: Install microsoft-trydotnet dependencies
+      shell: bash
+      working-directory: src/microsoft-trydotnet
+      run: npm ci
+
+    - name: Build microsoft-trydotnet
+      if: inputs.build == 'true'
+      shell: bash
+      working-directory: src/microsoft-trydotnet
+      run: npm run buildProd
+
+    - name: Install microsoft-trydotnet-editor dependencies
+      shell: bash
+      working-directory: src/microsoft-trydotnet-editor
+      run: npm ci
+
+    - name: Build microsoft-trydotnet-editor
+      if: inputs.build == 'true'
+      shell: bash
+      working-directory: src/microsoft-trydotnet-editor
+      run: npm run buildProd
+
+    - name: Install microsoft-trydotnet-styles dependencies
+      shell: bash
+      working-directory: src/microsoft-trydotnet-styles
+      run: npm ci
+
+    - name: Build microsoft-trydotnet-styles
+      if: inputs.build == 'true'
+      shell: bash
+      working-directory: src/microsoft-trydotnet-styles
+      run: npm run buildProd
+
+    - name: Install microsoft-learn-mock dependencies
+      shell: bash
+      working-directory: src/microsoft-learn-mock
+      run: npm ci
+
+    - name: Build microsoft-learn-mock
+      if: inputs.build == 'true'
+      shell: bash
+      working-directory: src/microsoft-learn-mock
+      run: npm run buildProd

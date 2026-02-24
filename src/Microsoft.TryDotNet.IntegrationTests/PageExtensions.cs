@@ -63,19 +63,11 @@ window.dispatchEvent(new MessageEvent(""message"", { data: request }));
         return editor;
     }
 
-    [Obsolete]
-    public static async Task TypeTextInMonacoEditor(this IPage page, string text, float? delay = null)
+    public static async Task TypeTextInMonacoEditor(this IPage page, string text, float? delay = 30)
     {
         var editor = await page.FindEditor();
         await editor.FocusAsync();
-        if (delay is not null)
-        {
-            await editor.TypeAsync(text, new LocatorTypeOptions {Delay = delay});
-        }
-        else
-        {
-            await editor.TypeAsync(text);
-        }
+        await editor.PressSequentiallyAsync(text, new LocatorPressSequentiallyOptions { Delay = delay });
     }
 
     public static async Task<string> GetEditorContentAsync(this IPage page)

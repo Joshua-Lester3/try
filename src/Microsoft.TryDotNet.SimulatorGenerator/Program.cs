@@ -4,18 +4,16 @@ using Microsoft.TryDotNet.SimulatorGenerator;
 var existingOnlyOption = new Option<DirectoryInfo>("--destination-folder")
 {
     Description = "Location to write the simulator files",
-    IsRequired = true
-}.ExistingOnly();
+    Required = true
+}.AcceptExistingOnly();
 
-var command = new RootCommand
-{
-    existingOnlyOption
-};
+var command = new RootCommand();
+command.Options.Add(existingOnlyOption);
 
-command.SetHandler(async (DirectoryInfo destinationFolder) =>
+command.SetAction(async (ParseResult parseResult, CancellationToken token) =>
 {
-    
+    var destinationFolder = parseResult.GetValue(existingOnlyOption)!;
     await ApiEndpointSimulatorGenerator.CreateScenarioFiles(destinationFolder);
-}, existingOnlyOption);
+});
 
-return command.Invoke(args);
+return await command.Parse(args).InvokeAsync();

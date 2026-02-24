@@ -10,15 +10,13 @@
         "sourceType": "module"
     },
     "plugins": [
-        "@typescript-eslint",
-        "deprecation"
+        "@typescript-eslint"
     ],
     "rules": {
-        "@typescript-eslint/semi": "warn",
         "curly": "warn",
-        "deprecation/deprecation": "warn",
+        "@typescript-eslint/no-deprecated": "warn",
         "eqeqeq": "warn",
         "no-throw-literal": "warn",
-        "semi": "off"
+        "semi": "warn"
     }
 }
