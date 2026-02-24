@@ -237,9 +237,11 @@ jobs:
           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
           REGISTRY_URL: ${{ vars.PRODCONTAINER_REGISTRY }}
-          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
+          ESSENTIALCSHARP_CLIENT_SECRET: ${{ secrets.ESSENTIALCSHARP_CLIENT_SECRET }}
+          ESSENTIALCSHARP_CLIENT_ID: ${{ secrets.ESSENTIALCSHARP_CLIENT_ID }}
+          ESSENTIALCSHARP_TENANT_ID: ${{ secrets.ESSENTIALCSHARP_TENANT_ID }}
         with:
           inlineScript: |
             az config set extension.use_dynamic_install=yes_without_prompt
             az containerapp up -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --image $REGISTRY_URL/try:${{ github.sha }} --environment $CONTAINER_APP_ENVIRONMENT --registry-server $REGISTRY_URL --ingress external --target-port 80 --debug
+            az containerapp up -n $CONTAINER_APP_NAME -g $RESOURCEGROUP --image $REGISTRY_URL/try:${{ github.sha }} --environment $CONTAINER_APP_ENVIRONMENT --registry-server $REGISTRY_URL --ingress external --target-port 80 --service-principal-client-id $ESSENTIALCSHARP_CLIENT_ID --service-principal-client-secret $ESSENTIALCSHARP_CLIENT_SECRET --service-principal-tenant-id $ESSENTIALCSHARP_TENANT_ID --debug
