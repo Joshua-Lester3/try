@@ -237,8 +237,8 @@ jobs:
           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
           REGISTRY_URL: ${{ vars.PRODCONTAINER_REGISTRY }}
-          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_CLIENT_ID }}
-          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_CLIENT_SECRET }}
+          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
         with:
           inlineScript: |
             az config set extension.use_dynamic_install=yes_without_prompt
