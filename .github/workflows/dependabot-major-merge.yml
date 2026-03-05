@@ -20,6 +20,12 @@ name: Dependabot major-version auto-merge
 on:
   pull_request:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to enable auto-merge on (must have ai-approved-major-update label)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -28,22 +34,53 @@ permissions:
 jobs:
   auto-merge-major:
     runs-on: ubuntu-latest
-    # All three conditions must be true — label, author, and repository.
+    # For label trigger: all four conditions must be true.
+    # For manual dispatch: always run (safety checks happen in steps).
     if: >-
-      github.event.label.name == 'ai-approved-major-update'
+      github.event_name == 'workflow_dispatch'
+      || (github.event.label.name == 'ai-approved-major-update'
       && github.event.pull_request.user.login == 'dependabot[bot]'
       && github.repository == 'IntelliTect/try'
-      && github.actor == 'github-actions[bot]'
+      && github.actor == 'github-actions[bot]')
     steps:
-      # ── 1. Fetch dependabot PR metadata ────────────────────────────
+      # ── 0. Resolve PR URL and SHA (label event vs manual dispatch) ──
+      - name: Resolve PR metadata
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ inputs.pr_number }}"
+            PR_URL=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.html_url')
+            PR_AUTHOR=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.user.login')
+            PR_SHA=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.head.sha')
+            HAS_LABEL=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '[.labels[].name] | contains(["ai-approved-major-update"])')
+            if [ "$PR_AUTHOR" != "dependabot[bot]" ]; then
+              echo "::error::PR #$PR_NUMBER author is '$PR_AUTHOR', not dependabot[bot] — refusing."
+              exit 1
+            fi
+            if [ "$HAS_LABEL" != "true" ]; then
+              echo "::error::PR #$PR_NUMBER does not have the 'ai-approved-major-update' label — refusing."
+              exit 1
+            fi
+          else
+            PR_URL="${{ github.event.pull_request.html_url }}"
+            PR_SHA="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "pr_sha=$PR_SHA" >> "$GITHUB_OUTPUT"
+
+      # ── 1. Fetch dependabot PR metadata (label trigger only) ────────
       - name: Dependabot metadata
         id: metadata
+        if: github.event_name == 'pull_request'
         uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      # ── 2. Verify this is a semver-major update ─────────────────────
+      # ── 2. Verify semver-major update type (label trigger only) ─────
       - name: Verify semver-major update type
+        if: github.event_name == 'pull_request'
         run: |
           UPDATE_TYPE="${{ steps.metadata.outputs.update-type }}"
           if [ "$UPDATE_TYPE" != "version-update:semver-major" ]; then
@@ -53,55 +90,41 @@ jobs:
           echo "✅ Confirmed semver-major update."
 
       # ── 3. Verify all CI checks passed ─────────────────────────────
-      # Re-verify check-run status as a defense-in-depth measure.
-      # The AI agent should have confirmed this before labeling, but we
-      # do not trust the label alone.
-      #
       # IMPORTANT: We exclude this workflow's own job ("auto-merge-major")
-      # from the check-run list because while this step is executing, our
-      # own job's check run has conclusion=null (still running) and would
-      # incorrectly cause a "pending check" false positive.
+      # to avoid a self-referential false positive (our job is in_progress
+      # with conclusion=null while this step runs).
       - name: Verify all check-runs passed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_SHA: ${{ steps.resolve.outputs.pr_sha }}
         run: |
-          echo "Fetching check-runs for SHA ${{ github.event.pull_request.head.sha }}..."
-
-          # per_page=100 ensures we don't silently miss checks beyond the default 30.
-          # We filter out our own job to avoid a self-referential false positive.
+          echo "Fetching check-runs for SHA $PR_SHA..."
           CHECK_RUNS=$(gh api \
-            "/repos/${{ github.repository }}/commits/${{ github.event.pull_request.head.sha }}/check-runs?per_page=100" \
+            "/repos/${{ github.repository }}/commits/$PR_SHA/check-runs?per_page=100" \
             --jq '[.check_runs[] | select(.name != "auto-merge-major")]')
-
           TOTAL=$(echo "$CHECK_RUNS" | jq 'length')
           echo "Found $TOTAL check-run(s) (excluding this job)."
-
           if [ "$TOTAL" -eq 0 ]; then
             echo "::error::No check-runs found — refusing to merge without CI signals."
             exit 1
           fi
-
-          # Every check must have concluded with "success" or "skipped".
           FAILED=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null)] | length')
           PENDING=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | length')
-
           if [ "$PENDING" -gt 0 ]; then
             echo "::error::$PENDING check-run(s) are still pending — refusing to merge."
             echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | .[].name'
             exit 1
           fi
-
           if [ "$FAILED" -gt 0 ]; then
             echo "::error::$FAILED check-run(s) did not succeed — refusing to merge."
             echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
             exit 1
           fi
-
           echo "✅ All $TOTAL check-run(s) passed (success or skipped)."
 
       # ── 4. Enable auto-merge ───────────────────────────────────────
       - name: Enable auto-merge
         run: gh pr merge --auto --squash "$PR_URL"
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_URL: ${{ steps.resolve.outputs.pr_url }}
           GH_TOKEN: ${{ secrets.GH_PAT_WORKFLOW }}
