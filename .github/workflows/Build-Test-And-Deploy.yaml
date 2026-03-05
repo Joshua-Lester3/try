@@ -224,8 +224,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ vars.PRODCONTAINER_REGISTRY }}
-          username: ${{ secrets.ESSENTIALCSHARP_CLIENT_ID }}
-          password: ${{ secrets.ESSENTIALCSHARP_CLIENT_SECRET }}
+          username: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+          password: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
 
       - name: Push Image to Container Registry
         run: docker push --all-tags ${{ vars.PRODCONTAINER_REGISTRY }}/try
@@ -237,8 +237,8 @@ jobs:
           RESOURCEGROUP: ${{ vars.RESOURCEGROUP }}
           CONTAINER_APP_ENVIRONMENT: ${{ vars.CONTAINER_APP_ENVIRONMENT }}
           REGISTRY_URL: ${{ vars.PRODCONTAINER_REGISTRY }}
-          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_CLIENT_ID }}
-          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_CLIENT_SECRET }}
+          ACR_USERNAME: ${{ secrets.ESSENTIALCSHARP_ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ESSENTIALCSHARP_ACR_PASSWORD }}
         with:
           inlineScript: |
             az config set extension.use_dynamic_install=yes_without_prompt
