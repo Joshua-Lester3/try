@@ -23,13 +23,13 @@
 #
 # Reviews major-version Dependabot PRs daily and approves safe ones for auto-merge
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"0056546b26d187175ea0fa0ae066ef54c8dffc7a69c87e419c743c8a8a2e7876","compiler_version":"v0.53.4"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"842381ecc597538c48b522c854afca39a6ffcce837e3df14249fb3f9f9109f6a","compiler_version":"v0.53.4"}
 
 name: "Dependabot Major Version Reviewer"
 "on":
   schedule:
-  - cron: "50 0 * * *"
-    # Friendly format: daily (scattered)
+  - cron: "50 0 * * 2"
+    # Friendly format: weekly on tuesday (scattered)
   workflow_dispatch:
 
 permissions: {}

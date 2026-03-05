@@ -25,7 +25,7 @@ on:
       pr_number:
         description: 'PR number to enable auto-merge on (must have ai-approved-major-update label)'
         required: true
-        type: string
+        type: number
 
 permissions:
   contents: write
@@ -78,22 +78,28 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      # ── 2. Verify semver-major update type (label trigger only) ─────
-      - name: Verify semver-major update type
+      # ── 2. Verify semver-major or multi-package update type ─────────
+      - name: Verify update type
         if: github.event_name == 'pull_request'
         run: |
           UPDATE_TYPE="${{ steps.metadata.outputs.update-type }}"
-          if [ "$UPDATE_TYPE" != "version-update:semver-major" ]; then
-            echo "::error::PR update-type is '$UPDATE_TYPE', not semver-major — refusing to merge."
+          # Allow semver-major and null/empty (multi-package PRs return null).
+          # Pure patch/minor single-package PRs are handled by dependabot-auto-merge.yml.
+          if [ "$UPDATE_TYPE" != "version-update:semver-major" ] && [ -n "$UPDATE_TYPE" ]; then
+            echo "::error::PR update-type is '$UPDATE_TYPE' (not semver-major or multi-package) — refusing to merge."
             exit 1
           fi
-          echo "✅ Confirmed semver-major update."
+          echo "✅ Update type accepted: '${UPDATE_TYPE:-multi-package/unknown}'"
 
       # ── 3. Verify all CI checks passed ─────────────────────────────
       # IMPORTANT: We exclude this workflow's own job ("auto-merge-major")
       # to avoid a self-referential false positive (our job is in_progress
       # with conclusion=null while this step runs).
-      - name: Verify all check-runs passed
+      #
+      # NOTE: Dependabot PRs sometimes have 0 check-runs via the commits
+      # endpoint but DO have workflow runs queryable by head_sha. We check
+      # both and accept if either source confirms all CI passed.
+      - name: Verify all CI passed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_SHA: ${{ steps.resolve.outputs.pr_sha }}
@@ -103,24 +109,56 @@ jobs:
             "/repos/${{ github.repository }}/commits/$PR_SHA/check-runs?per_page=100" \
             --jq '[.check_runs[] | select(.name != "auto-merge-major")]')
           TOTAL=$(echo "$CHECK_RUNS" | jq 'length')
-          echo "Found $TOTAL check-run(s) (excluding this job)."
+          echo "Found $TOTAL check-run(s) via check-runs API (excluding this job)."
+
           if [ "$TOTAL" -eq 0 ]; then
-            echo "::error::No check-runs found — refusing to merge without CI signals."
-            exit 1
+            echo "No check-runs found — falling back to workflow runs API (common for Dependabot PRs)..."
+            ALL_RUNS=$(gh api \
+              "/repos/${{ github.repository }}/actions/runs?head_sha=$PR_SHA&per_page=100" \
+              --jq '[.workflow_runs[] | select(.name != "Dependabot major-version auto-merge")]')
+            WF_TOTAL=$(echo "$ALL_RUNS" | jq 'length')
+            echo "Found $WF_TOTAL total workflow run(s) via actions/runs API."
+
+            if [ "$WF_TOTAL" -eq 0 ]; then
+              echo "::error::No CI results found via either API — refusing to merge without CI signals."
+              exit 1
+            fi
+
+            # Take only the latest run per workflow (highest run_number), so a
+            # successful re-run after an earlier failure isn't blocked by the old failure.
+            LATEST_RUNS=$(echo "$ALL_RUNS" | jq '[group_by(.name)[] | sort_by(.run_number) | last]')
+            LATEST_TOTAL=$(echo "$LATEST_RUNS" | jq 'length')
+            echo "Evaluating $LATEST_TOTAL latest run(s) (one per workflow)."
+
+            WF_PENDING=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | length')
+            WF_FAILED=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")] | length')
+
+            if [ "$WF_PENDING" -gt 0 ]; then
+              echo "::error::$WF_PENDING workflow run(s) are still pending — refusing to merge."
+              echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | .[].name'
+              exit 1
+            fi
+            if [ "$WF_FAILED" -gt 0 ]; then
+              echo "::error::$WF_FAILED workflow run(s) did not succeed — refusing to merge."
+              echo "$LATEST_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
+              exit 1
+            fi
+            echo "✅ All $LATEST_TOTAL latest workflow run(s) passed (via actions/runs API)."
+          else
+            FAILED=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null)] | length')
+            PENDING=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | length')
+            if [ "$PENDING" -gt 0 ]; then
+              echo "::error::$PENDING check-run(s) are still pending — refusing to merge."
+              echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | .[].name'
+              exit 1
+            fi
+            if [ "$FAILED" -gt 0 ]; then
+              echo "::error::$FAILED check-run(s) did not succeed — refusing to merge."
+              echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
+              exit 1
+            fi
+            echo "✅ All $TOTAL check-run(s) passed (via check-runs API)."
           fi
-          FAILED=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null)] | length')
-          PENDING=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | length')
-          if [ "$PENDING" -gt 0 ]; then
-            echo "::error::$PENDING check-run(s) are still pending — refusing to merge."
-            echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | .[].name'
-            exit 1
-          fi
-          if [ "$FAILED" -gt 0 ]; then
-            echo "::error::$FAILED check-run(s) did not succeed — refusing to merge."
-            echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
-            exit 1
-          fi
-          echo "✅ All $TOTAL check-run(s) passed (success or skipped)."
 
       # ── 4. Enable auto-merge ───────────────────────────────────────
       - name: Enable auto-merge

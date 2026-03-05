@@ -3,7 +3,7 @@ name: "Dependabot Major Version Reviewer"
 description: "Reviews major-version Dependabot PRs daily and approves safe ones for auto-merge"
 
 on:
-  schedule: daily
+  schedule: weekly on tuesday
 
 engine: copilot
 
@@ -73,7 +73,7 @@ These rules are absolute and must never be bypassed:
 
 1. **Author verification:** ONLY process pull requests where the author login is EXACTLY `dependabot[bot]`. If the author is anyone else — even if the PR title looks like a Dependabot PR — skip it immediately. No exceptions.
 2. **CI status:** ONLY process pull requests where ALL CI check runs have a conclusion of `"success"` or `"skipped"`. If any check has a conclusion of `"failure"`, `"cancelled"`, `"timed_out"`, `"action_required"`, or is still pending/in-progress/missing, skip the PR entirely.
-3. **Major version bumps only:** ONLY process PRs that represent a major version bump. Parse the PR title for the pattern "Bump <package> from <A>.<B>.<C> to <D>.<E>.<F>" (or similar Dependabot title formats). A major bump means `D > A`. If the major version has not increased, skip the PR.
+3. **Version bump scope:** Process PRs that are either (a) a major version bump for a single package, or (b) a multi-package PR (branch name contains `/multi-`). Skip single-package PRs that are pure patch or minor bumps — those are handled by the existing auto-merge workflow.
 4. **Skip already-processed PRs:** If a PR already has the label `ai-approved-major-update`, skip it.
 5. **Rate limit:** Process at most **10** PRs per run. Stop after reaching this limit.
 6. **When in doubt, do NOT approve.** If you are uncertain about safety for any reason, leave a comment explaining your concerns and flag the PR for human review. Never approve a PR you are not confident about.
@@ -92,12 +92,11 @@ For each candidate PR, perform the following checks in order. If any check fails
 
 1. **Author check:** Confirm the PR author login is exactly `dependabot[bot]`.
 2. **Already processed:** Check if the PR already has the `ai-approved-major-update` label. If so, skip.
-3. **Major version detection:** Parse the PR title to extract the old version and new version. Dependabot titles typically follow formats like:
-   - "Bump <package> from <old> to <new>"
-   - "Bump <package> from <old> to <new> in <path>"
-   - "Update <package> requirement from <old> to <new>"
-   Compare the major version components. Only proceed if the new major version is strictly greater than the old major version.
-4. **CI status:** Use the `actions` toolset to retrieve check runs for the PR's head commit. Verify that every check run has a conclusion of `"success"` or `"skipped"`. If any check is still running, has failed, or is missing, skip this PR.
+3. **Major version or unclassified bumps:** Parse the PR title and branch name. Dependabot titles typically follow formats like:
+   - Single package: "Bump <package> from <old> to <new>" — parse semver, only proceed if major version increased OR if this is a multi-package PR
+   - Multi-package: "Bump <package> in <path>" with a branch name containing `/multi-` — these have multiple packages updated together and `fetch-metadata` returns null for `update-type`. **Always process these** regardless of version increment — the AI must analyze the diff to determine all version changes
+   - If the title is a single-package bump where the major version has NOT increased (pure patch/minor), skip it — the existing auto-merge workflow handles those
+4. **CI status:** Use the `actions` toolset to retrieve check runs for the PR's head commit. Verify that every check run has a conclusion of `"success"` or `"skipped"`. If the check-runs endpoint returns 0 results, also query workflow runs by head SHA (`GET /repos/IntelliTect/try/actions/runs?head_sha=<sha>`) — Dependabot PRs often register their CI only as workflow runs, not as check-run objects. Group runs by workflow name and evaluate only the **latest run per workflow** (highest run number) — a successful re-run after an earlier failure is valid. At least one workflow run must exist and the latest run for every workflow must have `conclusion: "success"` or `"skipped"`. If any latest run has failed, is cancelled, or is still in-progress/pending, skip this PR entirely.
 
 ### Step 3: Verify the Diff is Version-Only
 
@@ -115,6 +114,8 @@ Retrieve the PR diff and inspect every changed file. The diff must contain ONLY 
 - `NuGet.config`
 
 If ANY file outside this list is modified, or if any code files (`.cs`, `.js`, `.ts`, `.py`, etc.) are changed, **skip the PR immediately** — this indicates the update includes non-trivial changes that require human review.
+
+For **multi-package PRs** (branch name contains `/multi-`): the diff will list version changes for multiple packages. Extract all package name + version change pairs from the diff and PR body. Research each package individually in Steps 4 and 5.
 
 ### Step 4: Identify the Ecosystem
 
