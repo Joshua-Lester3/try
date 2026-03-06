@@ -176,7 +176,7 @@ A PR is safe if: the diff is clean (version files only), there are no security v
 
 Perform these actions:
 
-1. **Submit an APPROVE review** using `submit-pull-request-review` on the PR with a body summarizing your findings.
+1. **Submit an APPROVE review** using `submit-pull-request-review` on the PR with a body summarizing your findings. Because this workflow runs on a schedule (not triggered by a PR), you **must** include `pull_request_number` set to the PR number in every `submit_pull_request_review` call so the review can be routed to the correct PR.
 2. **Add the label** `ai-approved-major-update` using `add-labels` on the PR.
 3. **Post a comment** using `add-comment` on the PR with the following format:
 
