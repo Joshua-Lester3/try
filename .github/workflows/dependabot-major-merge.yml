@@ -1,15 +1,18 @@
 # Dependabot major-version merge executor
 #
-# This is a companion to the AI review workflow. It is triggered when the
-# AI agent adds the "ai-approved-major-update" label to a dependabot PR.
+# This is a companion to the AI review workflow. It is triggered in two ways:
+#   1. workflow_run: when the AI reviewer completes — labels added by GITHUB_TOKEN
+#      do NOT fire pull_request:labeled events (GitHub security restriction), so
+#      we listen for the reviewer workflow completing and scan for labeled PRs.
+#   2. workflow_dispatch: for manual one-off triggering by a maintainer.
+#   3. pull_request:labeled: kept for future cases where a PAT is used for labeling.
 #
 # DEFENSE-IN-DEPTH: This workflow does NOT blindly trust the label. Before
-# enabling auto-merge it re-verifies every safety condition that the AI
-# agent was supposed to check:
+# enabling auto-merge it re-verifies every safety condition:
 #   1. The PR was opened by dependabot[bot].
-#   2. The label is exactly "ai-approved-major-update".
-#   3. ALL CI check-runs on the PR head SHA have passed (success/skipped).
-# If any condition fails, the workflow exits without merging.
+#   2. The PR has the "ai-approved-major-update" label.
+#   3. ALL CI workflow runs on the PR branch have passed (latest per workflow).
+# If any condition fails, the workflow skips/exits without merging.
 #
 # NOTE: The existing dependabot-auto-merge.yml already unconditionally
 # approves all dependabot PRs, so by the time this workflow runs the PR
@@ -18,6 +21,9 @@
 name: Dependabot major-version auto-merge
 
 on:
+  workflow_run:
+    workflows: ["Dependabot Major Version Reviewer"]
+    types: [completed]
   pull_request:
     types: [labeled]
   workflow_dispatch:
@@ -34,27 +40,90 @@ permissions:
 jobs:
   auto-merge-major:
     runs-on: ubuntu-latest
-    # For label trigger: all four conditions must be true.
-    # For manual dispatch: always run (safety checks happen in steps).
     if: >-
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
       || (github.event.label.name == 'ai-approved-major-update'
-      && github.event.pull_request.user.login == 'dependabot[bot]'
-      && github.repository == 'IntelliTect/try'
-      && github.actor == 'github-actions[bot]')
+         && github.event.pull_request.user.login == 'dependabot[bot]'
+         && github.repository == 'IntelliTect/try')
     steps:
-      # ── 0. Resolve PR URL and SHA (label event vs manual dispatch) ──
+
+      # ── workflow_run: loop over all labeled Dependabot PRs ──────────
+      # Labels added by GITHUB_TOKEN never fire pull_request:labeled events.
+      # Instead we trigger on reviewer completion and scan for labeled PRs.
+      - name: Process all labeled PRs (workflow_run)
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_WORKFLOW }}
+        run: |
+          echo "Fetching open Dependabot PRs with ai-approved-major-update label..."
+          PR_NUMBERS=$(gh api "/repos/${{ github.repository }}/pulls?state=open&per_page=100" \
+            --jq '[.[] | select(.user.login == "dependabot[bot]") | select(any(.labels[]; .name == "ai-approved-major-update")) | .number] | .[]')
+
+          if [ -z "$PR_NUMBERS" ]; then
+            echo "No labeled Dependabot PRs found — nothing to do."
+            exit 0
+          fi
+
+          for PR_NUMBER in $PR_NUMBERS; do
+            echo ""
+            echo "════════════════════════════════════════"
+            echo "Processing PR #$PR_NUMBER..."
+
+            PR_DATA=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER")
+            PR_URL=$(echo "$PR_DATA" | jq -r '.html_url')
+            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+
+            if [ "$PR_AUTHOR" != "dependabot[bot]" ]; then
+              echo "::warning::PR #$PR_NUMBER author is '$PR_AUTHOR' — skipping."
+              continue
+            fi
+
+            echo "Checking CI for branch: $PR_BRANCH"
+            ALL_RUNS=$(gh api "/repos/${{ github.repository }}/actions/runs?branch=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$PR_BRANCH")&per_page=100" \
+              --jq '[.workflow_runs[] | select(.name != "Dependabot major-version auto-merge")]')
+            TOTAL=$(echo "$ALL_RUNS" | jq 'length')
+
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "::warning::PR #$PR_NUMBER has no CI workflow runs — skipping."
+              continue
+            fi
+
+            # Latest run per workflow (highest run_number)
+            LATEST_RUNS=$(echo "$ALL_RUNS" | jq '[group_by(.name)[] | sort_by(.run_number) | last]')
+            PENDING=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | length')
+            FAILED=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")] | length')
+
+            if [ "$PENDING" -gt 0 ]; then
+              echo "::warning::PR #$PR_NUMBER has $PENDING pending CI run(s) — skipping."
+              continue
+            fi
+            if [ "$FAILED" -gt 0 ]; then
+              echo "::warning::PR #$PR_NUMBER has $FAILED failed CI run(s) — skipping."
+              echo "$LATEST_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
+              continue
+            fi
+
+            echo "✅ CI passed for PR #$PR_NUMBER — enabling auto-merge..."
+            gh pr merge --auto --squash "$PR_URL"
+            echo "✅ Auto-merge enabled for PR #$PR_NUMBER."
+          done
+
+      # ── pull_request / workflow_dispatch: single PR ─────────────────
       - name: Resolve PR metadata
         id: resolve
+        if: github.event_name != 'workflow_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PR_NUMBER="${{ inputs.pr_number }}"
-            PR_URL=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.html_url')
-            PR_AUTHOR=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.user.login')
-            PR_SHA=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.head.sha')
-            HAS_LABEL=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '[.labels[].name] | contains(["ai-approved-major-update"])')
+            PR_DATA=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER")
+            PR_URL=$(echo "$PR_DATA" | jq -r '.html_url')
+            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+            HAS_LABEL=$(echo "$PR_DATA" | jq '[.labels[].name] | contains(["ai-approved-major-update"])')
             if [ "$PR_AUTHOR" != "dependabot[bot]" ]; then
               echo "::error::PR #$PR_NUMBER author is '$PR_AUTHOR', not dependabot[bot] — refusing."
               exit 1
@@ -65,10 +134,10 @@ jobs:
             fi
           else
             PR_URL="${{ github.event.pull_request.html_url }}"
-            PR_SHA="${{ github.event.pull_request.head.sha }}"
+            PR_BRANCH="${{ github.event.pull_request.head.ref }}"
           fi
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "pr_sha=$PR_SHA" >> "$GITHUB_OUTPUT"
+          echo "pr_branch=$PR_BRANCH" >> "$GITHUB_OUTPUT"
 
       # ── 1. Fetch dependabot PR metadata (label trigger only) ────────
       - name: Dependabot metadata
@@ -83,85 +152,47 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           UPDATE_TYPE="${{ steps.metadata.outputs.update-type }}"
-          # Allow semver-major and null/empty (multi-package PRs return null).
-          # Pure patch/minor single-package PRs are handled by dependabot-auto-merge.yml.
           if [ "$UPDATE_TYPE" != "version-update:semver-major" ] && [ -n "$UPDATE_TYPE" ]; then
             echo "::error::PR update-type is '$UPDATE_TYPE' (not semver-major or multi-package) — refusing to merge."
             exit 1
           fi
           echo "✅ Update type accepted: '${UPDATE_TYPE:-multi-package/unknown}'"
 
-      # ── 3. Verify all CI checks passed ─────────────────────────────
-      # IMPORTANT: We exclude this workflow's own job ("auto-merge-major")
-      # to avoid a self-referential false positive (our job is in_progress
-      # with conclusion=null while this step runs).
-      #
-      # NOTE: Dependabot PRs sometimes have 0 check-runs via the commits
-      # endpoint but DO have workflow runs queryable by head_sha. We check
-      # both and accept if either source confirms all CI passed.
+      # ── 3. Verify CI passed (latest workflow run per workflow) ───────
       - name: Verify all CI passed
+        if: github.event_name != 'workflow_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_SHA: ${{ steps.resolve.outputs.pr_sha }}
+          PR_BRANCH: ${{ steps.resolve.outputs.pr_branch }}
         run: |
-          echo "Fetching check-runs for SHA $PR_SHA..."
-          CHECK_RUNS=$(gh api \
-            "/repos/${{ github.repository }}/commits/$PR_SHA/check-runs?per_page=100" \
-            --jq '[.check_runs[] | select(.name != "auto-merge-major")]')
-          TOTAL=$(echo "$CHECK_RUNS" | jq 'length')
-          echo "Found $TOTAL check-run(s) via check-runs API (excluding this job)."
-
+          ENCODED_BRANCH=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$PR_BRANCH")
+          echo "Fetching workflow runs for branch: $PR_BRANCH"
+          ALL_RUNS=$(gh api \
+            "/repos/${{ github.repository }}/actions/runs?branch=$ENCODED_BRANCH&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name != "Dependabot major-version auto-merge")]')
+          TOTAL=$(echo "$ALL_RUNS" | jq 'length')
+          echo "Found $TOTAL workflow run(s) for branch."
           if [ "$TOTAL" -eq 0 ]; then
-            echo "No check-runs found — falling back to workflow runs API (common for Dependabot PRs)..."
-            ALL_RUNS=$(gh api \
-              "/repos/${{ github.repository }}/actions/runs?head_sha=$PR_SHA&per_page=100" \
-              --jq '[.workflow_runs[] | select(.name != "Dependabot major-version auto-merge")]')
-            WF_TOTAL=$(echo "$ALL_RUNS" | jq 'length')
-            echo "Found $WF_TOTAL total workflow run(s) via actions/runs API."
-
-            if [ "$WF_TOTAL" -eq 0 ]; then
-              echo "::error::No CI results found via either API — refusing to merge without CI signals."
-              exit 1
-            fi
-
-            # Take only the latest run per workflow (highest run_number), so a
-            # successful re-run after an earlier failure isn't blocked by the old failure.
-            LATEST_RUNS=$(echo "$ALL_RUNS" | jq '[group_by(.name)[] | sort_by(.run_number) | last]')
-            LATEST_TOTAL=$(echo "$LATEST_RUNS" | jq 'length')
-            echo "Evaluating $LATEST_TOTAL latest run(s) (one per workflow)."
-
-            WF_PENDING=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | length')
-            WF_FAILED=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")] | length')
-
-            if [ "$WF_PENDING" -gt 0 ]; then
-              echo "::error::$WF_PENDING workflow run(s) are still pending — refusing to merge."
-              echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | .[].name'
-              exit 1
-            fi
-            if [ "$WF_FAILED" -gt 0 ]; then
-              echo "::error::$WF_FAILED workflow run(s) did not succeed — refusing to merge."
-              echo "$LATEST_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
-              exit 1
-            fi
-            echo "✅ All $LATEST_TOTAL latest workflow run(s) passed (via actions/runs API)."
-          else
-            FAILED=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null)] | length')
-            PENDING=$(echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | length')
-            if [ "$PENDING" -gt 0 ]; then
-              echo "::error::$PENDING check-run(s) are still pending — refusing to merge."
-              echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion == null)] | .[].name'
-              exit 1
-            fi
-            if [ "$FAILED" -gt 0 ]; then
-              echo "::error::$FAILED check-run(s) did not succeed — refusing to merge."
-              echo "$CHECK_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
-              exit 1
-            fi
-            echo "✅ All $TOTAL check-run(s) passed (via check-runs API)."
+            echo "::error::No CI workflow runs found for branch '$PR_BRANCH' — refusing to merge."
+            exit 1
           fi
+          LATEST_RUNS=$(echo "$ALL_RUNS" | jq '[group_by(.name)[] | sort_by(.run_number) | last]')
+          PENDING=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | length')
+          FAILED=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")] | length')
+          if [ "$PENDING" -gt 0 ]; then
+            echo "::error::$PENDING CI run(s) still pending — refusing to merge."
+            exit 1
+          fi
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED CI run(s) failed — refusing to merge."
+            echo "$LATEST_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
+            exit 1
+          fi
+          echo "✅ All CI runs passed."
 
       # ── 4. Enable auto-merge ───────────────────────────────────────
       - name: Enable auto-merge
+        if: github.event_name != 'workflow_run'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ steps.resolve.outputs.pr_url }}
