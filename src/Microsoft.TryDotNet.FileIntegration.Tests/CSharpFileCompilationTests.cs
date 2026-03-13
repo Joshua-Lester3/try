@@ -59,7 +59,7 @@ public class CSharpFileCompilationTests : IClassFixture<WebApplicationFactory<Pr
             foreach (var file in Directory.EnumerateFiles(samplesDir, "*.cs"))
             {
                 // Embedded samples have no chapter
-                yield return new object[] { file, Path.GetFileName(file), null! };
+                yield return new object[] { file, Path.GetFileName(file), null };
             }
         }
 
