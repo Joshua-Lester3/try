@@ -29,9 +29,9 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'PR number to enable auto-merge on (must have ai-approved-major-update label)'
+        description: 'PR number(s) to enable auto-merge on (comma-separated, must have ai-approved-major-update label)'
         required: true
-        type: number
+        type: string
 
 permissions:
   contents: write
@@ -106,38 +106,96 @@ jobs:
             fi
 
             echo "✅ CI passed for PR #$PR_NUMBER — enabling auto-merge..."
-            gh pr merge --auto --squash "$PR_URL"
-            echo "✅ Auto-merge enabled for PR #$PR_NUMBER."
+            MERGE_OUTPUT=$(gh pr merge --auto --squash "$PR_URL" 2>&1) && \
+              echo "✅ Auto-merge enabled for PR #$PR_NUMBER." || \
+            {
+              if echo "$MERGE_OUTPUT" | grep -q "clean status"; then
+                echo "Branch protection has no required checks — merging directly..."
+                gh pr merge --squash --delete-branch "$PR_URL"
+                echo "✅ PR #$PR_NUMBER merged directly."
+              else
+                echo "::error::Failed to merge PR #$PR_NUMBER: $MERGE_OUTPUT"
+                exit 1
+              fi
+            }
           done
 
-      # ── pull_request / workflow_dispatch: single PR ─────────────────
+      # ── pull_request / workflow_dispatch: single or multiple PRs ──────
       - name: Resolve PR metadata
         id: resolve
         if: github.event_name != 'workflow_run'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT_WORKFLOW }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PR_NUMBER="${{ inputs.pr_number }}"
-            PR_DATA=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER")
-            PR_URL=$(echo "$PR_DATA" | jq -r '.html_url')
-            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
-            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
-            HAS_LABEL=$(echo "$PR_DATA" | jq '[.labels[].name] | contains(["ai-approved-major-update"])')
-            if [ "$PR_AUTHOR" != "dependabot[bot]" ]; then
-              echo "::error::PR #$PR_NUMBER author is '$PR_AUTHOR', not dependabot[bot] — refusing."
-              exit 1
-            fi
-            if [ "$HAS_LABEL" != "true" ]; then
-              echo "::error::PR #$PR_NUMBER does not have the 'ai-approved-major-update' label — refusing."
-              exit 1
-            fi
+            # Loop over comma-separated PR numbers, handling each fully inline.
+            IFS=',' read -ra PR_LIST <<< "${{ inputs.pr_number }}"
+            for PR_NUMBER in "${PR_LIST[@]}"; do
+              PR_NUMBER=$(echo "$PR_NUMBER" | tr -d ' ')
+              echo ""
+              echo "════════════════════════════════════════"
+              echo "Processing PR #$PR_NUMBER..."
+
+              PR_DATA=$(gh api "/repos/${{ github.repository }}/pulls/$PR_NUMBER")
+              PR_URL=$(echo "$PR_DATA" | jq -r '.html_url')
+              PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+              PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+              HAS_LABEL=$(echo "$PR_DATA" | jq '[.labels[].name] | contains(["ai-approved-major-update"])')
+
+              if [ "$PR_AUTHOR" != "dependabot[bot]" ]; then
+                echo "::error::PR #$PR_NUMBER author is '$PR_AUTHOR', not dependabot[bot] — skipping."
+                continue
+              fi
+              if [ "$HAS_LABEL" != "true" ]; then
+                echo "::error::PR #$PR_NUMBER does not have the 'ai-approved-major-update' label — skipping."
+                continue
+              fi
+
+              echo "Checking CI for branch: $PR_BRANCH"
+              ENCODED_BRANCH=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$PR_BRANCH")
+              ALL_RUNS=$(gh api "/repos/${{ github.repository }}/actions/runs?branch=$ENCODED_BRANCH&per_page=100" \
+                --jq '[.workflow_runs[] | select(.name != "Dependabot major-version auto-merge")]')
+              TOTAL=$(echo "$ALL_RUNS" | jq 'length')
+
+              if [ "$TOTAL" -eq 0 ]; then
+                echo "::warning::PR #$PR_NUMBER has no CI workflow runs — skipping."
+                continue
+              fi
+
+              LATEST_RUNS=$(echo "$ALL_RUNS" | jq '[group_by(.name)[] | sort_by(.run_number) | last]')
+              PENDING=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status != "completed")] | length')
+              FAILED=$(echo "$LATEST_RUNS" | jq '[.[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")] | length')
+
+              if [ "$PENDING" -gt 0 ]; then
+                echo "::warning::PR #$PR_NUMBER has $PENDING pending CI run(s) — skipping."
+                continue
+              fi
+              if [ "$FAILED" -gt 0 ]; then
+                echo "::warning::PR #$PR_NUMBER has $FAILED failed CI run(s) — skipping."
+                echo "$LATEST_RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | .[] | {name, conclusion}'
+                continue
+              fi
+
+              echo "✅ CI passed for PR #$PR_NUMBER — merging..."
+              MERGE_OUTPUT=$(gh pr merge --auto --squash "$PR_URL" 2>&1) && \
+                echo "✅ Auto-merge enabled for PR #$PR_NUMBER." || \
+              {
+                if echo "$MERGE_OUTPUT" | grep -q "clean status"; then
+                  echo "Branch protection has no required checks — merging directly..."
+                  gh pr merge --squash --delete-branch "$PR_URL"
+                  echo "✅ PR #$PR_NUMBER merged directly."
+                else
+                  echo "::error::Failed to merge PR #$PR_NUMBER: $MERGE_OUTPUT"
+                  exit 1
+                fi
+              }
+            done
           else
             PR_URL="${{ github.event.pull_request.html_url }}"
             PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+            echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+            echo "pr_branch=$PR_BRANCH" >> "$GITHUB_OUTPUT"
           fi
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "pr_branch=$PR_BRANCH" >> "$GITHUB_OUTPUT"
 
       # ── 1. Fetch dependabot PR metadata (label trigger only) ────────
       - name: Dependabot metadata
@@ -160,7 +218,7 @@ jobs:
 
       # ── 3. Verify CI passed (latest workflow run per workflow) ───────
       - name: Verify all CI passed
-        if: github.event_name != 'workflow_run'
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BRANCH: ${{ steps.resolve.outputs.pr_branch }}
@@ -192,8 +250,20 @@ jobs:
 
       # ── 4. Enable auto-merge ───────────────────────────────────────
       - name: Enable auto-merge
-        if: github.event_name != 'workflow_run'
-        run: gh pr merge --auto --squash "$PR_URL"
+        if: github.event_name == 'pull_request'
         env:
           PR_URL: ${{ steps.resolve.outputs.pr_url }}
           GH_TOKEN: ${{ secrets.GH_PAT_WORKFLOW }}
+        run: |
+          MERGE_OUTPUT=$(gh pr merge --auto --squash "$PR_URL" 2>&1) && \
+            echo "✅ Auto-merge enabled." || \
+          {
+            if echo "$MERGE_OUTPUT" | grep -q "clean status"; then
+              echo "Branch protection has no required checks — merging directly..."
+              gh pr merge --squash --delete-branch "$PR_URL"
+              echo "✅ PR merged directly."
+            else
+              echo "::error::Failed to merge PR: $MERGE_OUTPUT"
+              exit 1
+            fi
+          }

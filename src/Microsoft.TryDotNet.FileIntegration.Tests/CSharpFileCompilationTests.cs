@@ -56,7 +56,7 @@ public class CSharpFileCompilationTests : IClassFixture<WebApplicationFactory<Pr
             foreach (var file in Directory.EnumerateFiles(samplesDir, "*.cs"))
             {
                 // Embedded samples have no chapter
-                yield return new object[] { file, Path.GetFileName(file), null! };
+                yield return new object[] { file, Path.GetFileName(file), null };
             }
         }
 
@@ -127,7 +127,7 @@ public class CSharpFileCompilationTests : IClassFixture<WebApplicationFactory<Pr
 
         // Chapter files require the metadata JSON to be present. Fail early with a clear
         // message rather than silently asserting "all chapter files compile", which is wrong
-        // for listings that intentionally reference types defined in other listingfiles.
+        // for listings that intentionally reference types defined in other listing files.
         if (chapterName is not null && _listingsFixture.Model is null)
         {
             var resolvedPath = _listingsFixture.JsonFilePath ?? "(unresolved — set TRYDOTNET_LISTINGS_PATH or TRYDOTNET_LISTINGS_METADATA)";
